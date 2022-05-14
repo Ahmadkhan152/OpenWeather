@@ -109,8 +109,6 @@ class HomePageActivity : AppCompatActivity() {
 
 
 
-
-
         horizontallayout= LinearLayoutManager(this,LinearLayoutManager.HORIZONTAL,false)
         daysData.layoutManager=LinearLayoutManager(this,LinearLayoutManager.VERTICAL,false)
         hourlyData.layoutManager=horizontallayout

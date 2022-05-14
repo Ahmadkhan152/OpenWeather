@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Open_Weather_App</string>
+    <string name="app_name">OpenWeather</string>
     <string name="api_key">d2100ba93eabfca395ceb489d2206a93</string>
     <string name="currentWeather">%d°C</string>
     <string name="feel_like">Feels like %d°C</string>
