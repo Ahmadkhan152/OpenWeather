@@ -1,13 +1,19 @@
 package com.example.open_weather_app.Recycler_Adapter
 
 import android.content.Context
+import android.content.SharedPreferences
+import android.os.Build
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.annotation.RequiresApi
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
+import com.example.open_weather_app.Constants.METRIC
+import com.example.open_weather_app.Constants.MY_PREFERENCES
+import com.example.open_weather_app.Constants.UNITS
 import com.example.open_weather_app.Model.Daily
 import com.example.open_weather_app.R
 import java.text.SimpleDateFormat
@@ -29,6 +35,7 @@ class DayDisplay (val context: Context,val daily:ArrayList<Daily>): RecyclerView
         return viewHolder(myView)
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     override fun onBindViewHolder(holder: viewHolder, position: Int) {
         var url="http://openweathermap.org/img/wn/${daily[position].weather[0].icon}@2x.png"
         var hours=daily[position].dt*1000L
@@ -39,8 +46,17 @@ class DayDisplay (val context: Context,val daily:ArrayList<Daily>): RecyclerView
         Glide.with(context)
             .load(url)
             .into(holder.ivPicture)
-        holder.tvTemperature.text="${daily[position].temp.max.toInt()} / ${daily[position].temp.min.toInt()} °C "
+        val sharedPreferences:SharedPreferences=context.getSharedPreferences(MY_PREFERENCES,Context.MODE_PRIVATE)
+        val unit=sharedPreferences.getString(UNITS, METRIC)
+        if (unit== METRIC)
+        {
+            holder.tvTemperature.text="${daily[position].temp.max.toInt()} / ${daily[position].temp.min.toInt()} °C "
+        }
+        else
+        {
+            holder.tvTemperature.text="${daily[position].temp.max.toInt()} / ${daily[position].temp.min.toInt()} °F "
 
+        }
     }
     private fun getTime(hours: Long, s: String): Any {
         val formatter = SimpleDateFormat(s)

@@ -2,17 +2,22 @@ package com.example.open_weather_app.Activity
 
 import android.Manifest
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.location.Address
 import android.location.Geocoder
 import android.location.Location
+import android.location.LocationRequest
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.View
-import android.widget.ImageView
-import android.widget.ProgressBar
-import android.widget.TextView
-import android.widget.Toast
+import android.widget.*
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -24,13 +29,12 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.bumptech.glide.Glide
-import com.example.open_weather_app.Constants.BASE_URL_FOR_IMAGES
-import com.example.open_weather_app.Constants.LOCATION_FAILED
-import com.example.open_weather_app.Constants.PERMISSION_DENIE
-import com.example.open_weather_app.Constants.URL_END_FOR_IMAGES
+import com.example.open_weather_app.Constants.*
 import com.example.open_weather_app.Interface.RetrofitInterface
+import com.example.open_weather_app.Model.WeatherData
 import com.example.open_weather_app.Object.RetrofitHelper
 import com.example.open_weather_app.R
+import com.example.open_weather_app.Receiver.MyReceiver
 import com.example.open_weather_app.Recycler_Adapter.DayDisplay
 import com.example.open_weather_app.Recycler_Adapter.HoursDisplay
 import com.example.open_weather_app.Repository.ClassRepo
@@ -59,21 +63,38 @@ class HomePageActivity : AppCompatActivity() {
     lateinit var tvUVindex:TextView
     lateinit var swipeRefreshLayout: SwipeRefreshLayout
     lateinit var tvPressure:TextView
+    lateinit var tvNoInternetConnection:TextView
+    lateinit var tvCheckBackText:TextView
+    lateinit var repository:ClassRepo
+    lateinit var weatherService:RetrofitInterface
+    lateinit var btnTryAgain:Button
     lateinit var tvVisiblity:TextView
     lateinit var tvLocation:TextView
     lateinit var progressbar:ProgressBar
     lateinit var layoutConstraint:ConstraintLayout
     lateinit var midLayout:ConstraintLayout
     lateinit var headerLayout:ConstraintLayout
+    lateinit var sharedPreferences: SharedPreferences
+    lateinit var editor: SharedPreferences.Editor
     lateinit var ivCurrentWeather:ImageView
+    lateinit var filter:IntentFilter
+    lateinit var receiver: MyReceiver
+    lateinit var it:WeatherData
+    var wind:String=""
+    var distance:Float=0.0f
+    lateinit var btnMenu:ImageView
     lateinit var ivSearch:ImageView
     var cityName:String=""
+    var units:String=""
+    var pressure:Float=0.0f
     var stateName:String=""
     var countryName:String=""
+    var time:String=""
     lateinit var tvDewPoint:TextView
     var latitude:Double=0.0;
     var longitude:Double=0.0;
-    lateinit var fusedLocationProviderClient: FusedLocationProviderClient
+    var checkInternetConnection:Int=0
+    var address:String=""
     val getContent = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result: ActivityResult? ->
 
         if (result?.resultCode == Activity.RESULT_OK) {
@@ -84,6 +105,9 @@ class HomePageActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        sharedPreferences=getSharedPreferences(MY_PREFERENCES, MODE_PRIVATE)
+        it=intent.getSerializableExtra(OBJECT) as WeatherData
+        units= sharedPreferences.getString(UNITS, METRIC).toString()
         tvCurrentTemperature=findViewById(R.id.tvCurrentTemperature)
         tvFeelLike=findViewById(R.id.tvFeelsLike)
         tvWeatherMain=findViewById(R.id.tvWeatherMain)
@@ -101,23 +125,77 @@ class HomePageActivity : AppCompatActivity() {
         headerLayout=findViewById(R.id.layoutheader)
         progressbar=findViewById(R.id.progressbar)
         tvLocation=findViewById(R.id.tvLocation)
-        fusedLocationProviderClient= LocationServices.getFusedLocationProviderClient(this)
         hourlyData=findViewById(R.id.recyclerview)
         daysData=findViewById(R.id.recyclerview2)
         ivSearch=findViewById(R.id.ivSearch)
+        btnMenu=findViewById(R.id.btnMenu)
+        tvNoInternetConnection=findViewById(R.id.tvNoInternetConnection)
+        tvCheckBackText=findViewById(R.id.tvCheckBackText)
+        btnTryAgain=findViewById(R.id.btnTryAgain)
         swipeRefreshLayout=findViewById(R.id.swipeRefreshLayout)
 
-
-
+        address=intent.getStringExtra(ADDRESS).toString()
         horizontallayout= LinearLayoutManager(this,LinearLayoutManager.HORIZONTAL,false)
         daysData.layoutManager=LinearLayoutManager(this,LinearLayoutManager.VERTICAL,false)
         hourlyData.layoutManager=horizontallayout
-        reloadAPI()
+        checkInternetConnection=getConnectionType(this)
+        filter = IntentFilter()
+        filter.addAction(BROAD_CAST_PACKAGE_NAME)
+        receiver = MyReceiver(this)
+        registerReceiver(receiver, filter)
+        allData()
+        weatherService= RetrofitHelper.getInstance().create(RetrofitInterface::class.java)
+        repository=ClassRepo(weatherService)
+        mainViewModel=ViewModelProvider(this,MainViewModelFactory(repository,31.5194,74.3228,units)).get(MainViewModel::class.java)
+        if (checkInternetConnection==0){
 
+            progressbar.visibility=View.INVISIBLE
+            tvCheckBackText.visibility=View.VISIBLE
+            tvNoInternetConnection.visibility=View.VISIBLE
+            btnTryAgain.visibility=View.VISIBLE
+        }
+        else
+        {
+            reloadAPI()
+        }
+        btnMenu.setOnClickListener {
 
+            val intent=Intent(this@HomePageActivity,MenuActivity::class.java)
+            startActivity(intent)
+        }
+        btnTryAgain.setOnClickListener {
+            checkInternetConnection=getConnectionType(this)
+            if (checkInternetConnection> NO_CONNECTION){
+                //progressbar.visibility=View.VISIBLE
+                tvCheckBackText.visibility=View.INVISIBLE
+                tvNoInternetConnection.visibility=View.INVISIBLE
+                btnTryAgain.visibility=View.INVISIBLE
+                mainViewModel.initData(units)
+            }
+
+        }
         val refreshListener = SwipeRefreshLayout.OnRefreshListener {
             swipeRefreshLayout.isRefreshing = true
-            reloadAPI()
+            checkInternetConnection=getConnectionType(this)
+            if (checkInternetConnection>0){
+
+                mainViewModel.initData(units)
+            }
+            else
+            {
+                midLayout.visibility=View.INVISIBLE
+                layoutConstraint.visibility=View.INVISIBLE
+                tvFeelLike.visibility=View.INVISIBLE
+                headerLayout.visibility=View.INVISIBLE
+                tvCurrentTemperature.visibility=View.INVISIBLE
+                tvPredictionForRain.visibility=View.INVISIBLE
+                daysData.visibility=View.INVISIBLE
+                hourlyData.visibility=View.INVISIBLE
+                tvCheckBackText.visibility=View.VISIBLE
+                tvNoInternetConnection.visibility=View.VISIBLE
+                btnTryAgain.visibility=View.VISIBLE
+                swipeRefreshLayout.isRefreshing=false
+            }
         }
         swipeRefreshLayout.setOnRefreshListener(refreshListener);
 
@@ -128,106 +206,87 @@ class HomePageActivity : AppCompatActivity() {
             getContent.launch(intent)
         }
     }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        unregisterReceiver(receiver)
+
+    }
     override fun onStart() {
         super.onStart()
-        if (ContextCompat.checkSelfPermission(this,
-                Manifest.permission.ACCESS_FINE_LOCATION)== PackageManager.PERMISSION_GRANTED)
+    }
+    private fun getConnectionType(context: Context): Int {
+        var result = NO_CONNECTION
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager?
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            cm?.run {
+                cm.getNetworkCapabilities(cm.activeNetwork)?.run {
+                    if (hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                        result = WIFI_ENABLE
+                    } else if (hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+                        result = MOBILE_DATA_ENABLE
+                    } else if (hasTransport(NetworkCapabilities.TRANSPORT_VPN)){
+                        result = VPN_ENABLE
+                    }
+                }
+            }
+        }
+        return result
+    }
+    fun allData()
+    {
+        units= sharedPreferences.getString(UNITS, METRIC).toString()
+        time= sharedPreferences.getString(TIME_FORMAT, "12").toString()
+        progressbar.visibility=View.INVISIBLE
+        midLayout.visibility=View.VISIBLE
+        layoutConstraint.visibility=View.VISIBLE
+        tvFeelLike.visibility=View.VISIBLE
+        headerLayout.visibility=View.VISIBLE
+        tvCurrentTemperature.visibility=View.VISIBLE
+        tvPredictionForRain.visibility=View.VISIBLE
+        tvCheckBackText.visibility=View.INVISIBLE
+        tvNoInternetConnection.visibility=View.INVISIBLE
+        btnTryAgain.visibility=View.INVISIBLE
+        daysData.visibility=View.VISIBLE
+        hourlyData.visibility=View.VISIBLE
+        if (units == METRIC)
         {
-            getLocation();
+            tvCurrentTemperature.text= getString(R.string.currentWeatherC,it.current.temp.toInt())
+            tvDewPoint.text="Dew point: ${it.current.visibility.toInt()}°C"
         }
         else
         {
-            askLocationPermission()
+            tvCurrentTemperature.text= getString(R.string.currentWeatherF,it.current.temp.toInt())
+            tvDewPoint.text="Dew point: ${it.current.visibility.toInt()}°F"
         }
-    }
-    private fun getLocation(){
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
-        {
-            ActivityCompat.requestPermissions(this,
-                arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION), 569)
-        }
-        var locationTask: Task<Location> = fusedLocationProviderClient.lastLocation
-        locationTask.addOnSuccessListener { location: Location? ->
-            if (location != null)
-            {
-                latitude=location.latitude
-                longitude=location.longitude
-                getAddress(latitude,longitude)
-            }
-        }
-        locationTask.addOnFailureListener{
-            Toast.makeText(this, LOCATION_FAILED, Toast.LENGTH_SHORT).show();
-        }
+        val URLForImages= BASE_URL_FOR_IMAGES+it.current.weather[0].icon+ URL_END_FOR_IMAGES
+        Glide.with(this)
+            .load(URLForImages)
+            .into(ivCurrentWeather)
+        swipeRefreshLayout.isRefreshing = false
+        tvFeelLike.text=getString(R.string.feel_like,it.current.feels_like.toInt())
+        tvLocation.text=address
+        tvWind.text="Wind: ${it.current.wind_speed.toInt()}m/s"
+        wind="${it.current.wind_speed.toInt()}"
+        tvHumidity.text="Humidity: ${it.current.humidity.toInt()}%"
+        tvUVindex.text="UV index: ${it.current.uvi}"
+        tvWeatherMainDescription.text="${it.current.weather[0].description}"
+        tvPressure.text="Pressure: ${it.current.pressure.toInt()}hPa"
+        pressure=it.current.pressure.toString().toFloat()
+        val visibility=it.current.visibility/1000
+        tvVisiblity.text="Visiblity: ${visibility}km"
+        distance=visibility.toFloat()
+        tvWeatherMain.text="${it.current.weather[0].main}"
+        hoursDisplay=HoursDisplay(this,it.hourly)
+        dayDisplay=DayDisplay(this,it.daily)
+        hourlyData.isHorizontalScrollBarEnabled=true
+        daysData.adapter=dayDisplay
+        hourlyData.adapter=hoursDisplay
     }
     private fun reloadAPI()
     {
-        val weatherService= RetrofitHelper.getInstance().create(RetrofitInterface::class.java)
-        val repository=ClassRepo(weatherService)
-        mainViewModel=ViewModelProvider(this,MainViewModelFactory(repository)).get(MainViewModel::class.java)
         mainViewModel.weather.observe(this) {
-            progressbar.visibility=View.INVISIBLE
-            midLayout.visibility=View.VISIBLE
-            layoutConstraint.visibility=View.VISIBLE
-            tvFeelLike.visibility=View.VISIBLE
-            headerLayout.visibility=View.VISIBLE
-            tvCurrentTemperature.visibility=View.VISIBLE
-            tvPredictionForRain.visibility=View.VISIBLE
-            tvCurrentTemperature.text= getString(R.string.currentWeather,it.current.temp.toInt())
-            val URLForImages= BASE_URL_FOR_IMAGES+it.current.weather[0].icon+ URL_END_FOR_IMAGES
-            Glide.with(this)
-                .load(URLForImages)
-                .into(ivCurrentWeather)
-            swipeRefreshLayout.isRefreshing = false
-            tvFeelLike.text=getString(R.string.feel_like,it.current.feels_like.toInt())
-            tvLocation.text=cityName+","+countryName
-            tvWind.text="Wind: ${it.current.wind_speed.toInt()}m/s"
-            tvHumidity.text="Humidity: ${it.current.humidity.toInt()}%"
-            tvUVindex.text="UV index: ${it.current.uvi}"
-            tvWeatherMainDescription.text="${it.current.weather[0].description}"
-            tvPressure.text="Pressure: ${it.current.pressure.toInt()}hPa"
-            val visibility=it.current.visibility/1000
-            tvVisiblity.text="Visiblity: ${visibility}km"
-            tvDewPoint.text="Dew point: ${it.current.visibility.toInt()}°C"
-            tvWeatherMain.text="${it.current.weather[0].main}"
-            hoursDisplay=HoursDisplay(this,it.hourly)
-            dayDisplay=DayDisplay(this,it.daily)
-            hourlyData.isHorizontalScrollBarEnabled=true
-            daysData.adapter=dayDisplay
-            hourlyData.adapter=hoursDisplay
+            allData()
         }
-    }
-    private fun askLocationPermission(){
-        if (ContextCompat.checkSelfPermission(this,
-                Manifest.permission.ACCESS_FINE_LOCATION)!= PackageManager.PERMISSION_GRANTED){
-            if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.ACCESS_FINE_LOCATION))
-            {
-                ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION),568)
-            }
-            else
-            {
-                ActivityCompat.requestPermissions(this, arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION),568)
-            }
-        }
-    }
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-
-        if(grantResults[0] == PackageManager.PERMISSION_GRANTED)
-        {
-            getLocation();
-        }
-        else
-            Toast.makeText(this, PERMISSION_DENIE, Toast.LENGTH_SHORT).show()
-    }
-    fun getAddress(lat:Double,lon:Double) {
-        val geocoder=Geocoder(this, Locale.getDefault())
-        val addresses:List<Address> =geocoder.getFromLocation(lat,lon,1)
-        cityName=addresses[0].subLocality
-        stateName=addresses[0].adminArea
-        countryName=addresses[0].countryName
     }
 }

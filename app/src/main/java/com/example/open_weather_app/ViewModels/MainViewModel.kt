@@ -9,10 +9,10 @@ import com.example.open_weather_app.Repository.ClassRepo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-class MainViewModel(val classRepo: ClassRepo):ViewModel() {
-    init {
+class MainViewModel(val classRepo: ClassRepo,val lat:Double,val long:Double,val units:String):ViewModel() {
+    fun initData(units: String){
         viewModelScope.launch(Dispatchers.IO){
-            val result = classRepo.getWeather()
+            val result = classRepo.getWeather(lat,long,units)
             if (result.body()!=null)
             {
                 weather.postValue(result.body())

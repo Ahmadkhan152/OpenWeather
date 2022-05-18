@@ -16,6 +16,7 @@
         android:textStyle="bold"
         android:textSize="@dimen/_10ssp"
         app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintRight_toRightOf="parent"
         app:layout_constraintLeft_toLeftOf="parent"></TextView>
 
 
@@ -25,7 +26,8 @@
         android:id="@+id/ivDay"
         android:src="@drawable/_205209_bright_day_light_sun_icon"
         app:layout_constraintTop_toBottomOf="@+id/tvTime"
-        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toRightOf="@+id/tvTime"
+        app:layout_constraintLeft_toLeftOf="@+id/tvTime"
         android:layout_margin="@dimen/_3sdp"></ImageView>
 
 
@@ -38,7 +40,8 @@
         android:textColor="#000000"
         android:textSize="@dimen/_12ssp"
         app:layout_constraintTop_toBottomOf="@+id/ivDay"
-        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintLeft_toLeftOf="@id/ivDay"
+        app:layout_constraintRight_toRightOf="@id/ivDay"
         android:layout_margin="@dimen/_5sdp"></TextView>
 
 

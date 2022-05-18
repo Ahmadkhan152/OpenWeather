@@ -12,7 +12,7 @@ class ClassRepo(private val retrofitInterface: RetrofitInterface) {
 
     val weather:LiveData<WeatherData>
     get()=weatherLiveData
-    suspend fun getWeather(): Response<WeatherData> {
-        return retrofitInterface.getData(31.5194,74.3228,"metric","d2100ba93eabfca395ceb489d2206a93")
+    suspend fun getWeather(lat:Double,long:Double,units:String): Response<WeatherData> {
+        return retrofitInterface.getData(lat,long,units,"d2100ba93eabfca395ceb489d2206a93")
     }
 }

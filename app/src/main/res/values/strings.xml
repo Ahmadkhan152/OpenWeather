@@ -1,7 +1,8 @@
 <resources>
     <string name="app_name">OpenWeather</string>
     <string name="api_key">d2100ba93eabfca395ceb489d2206a93</string>
-    <string name="currentWeather">%d°C</string>
+    <string name="currentWeatherC">%d°C</string>
+    <string name="currentWeatherF">%d°F</string>
     <string name="feel_like">Feels like %d°C</string>
     <string name="google_maps_key">AIzaSyA5svfMRaLVpKR-6KQr1ZeFLpAHdQ8Hgd8</string>
 </resources>
